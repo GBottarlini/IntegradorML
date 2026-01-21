@@ -40,6 +40,102 @@ export async function getAllSkusWithSources() {
 }
 
 /**
+ * Obtiene SKUs con paginacion y filtros.
+ * @param {object} params
+ * @param {number} params.limit
+ * @param {number} params.offset
+ * @param {string} [params.query]
+ * @param {boolean} [params.linkedOnly]
+ * @param {string} [params.sort]
+ */
+export async function getSkusPage({
+  limit = 50,
+  offset = 0,
+  query = "",
+  linkedOnly = false,
+  sort = "stock_desc",
+} = {}) {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 200));
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  const safeQuery = String(query || "").trim();
+
+  const whereParts = [];
+  const whereValues = [];
+  let idx = 1;
+
+  if (safeQuery) {
+    whereParts.push(`(s.sku ILIKE $${idx} OR s.title ILIKE $${idx})`);
+    whereValues.push(`%${safeQuery}%`);
+    idx += 1;
+  }
+
+  if (linkedOnly) {
+    whereParts.push(
+      `EXISTS (SELECT 1 FROM ml_items m WHERE m.sku = s.sku)
+       AND EXISTS (SELECT 1 FROM tn_items t WHERE t.sku = s.sku)`
+    );
+  }
+
+  const whereClause = whereParts.length ? `WHERE ${whereParts.join(" AND ")}` : "";
+
+  const sortMap = {
+    stock_desc: "s.stock DESC",
+    stock_asc: "s.stock ASC",
+    updated_desc: "s.updated_at DESC",
+  };
+  const orderBy = sortMap[sort] || sortMap.stock_desc;
+
+  try {
+    const itemsQuery = `
+      SELECT s.sku, s.title, s.stock, s.image_url, s.updated_at,
+        EXISTS (SELECT 1 FROM ml_items m WHERE m.sku = s.sku) AS has_ml,
+        EXISTS (SELECT 1 FROM tn_items t WHERE t.sku = s.sku) AS has_tn
+      FROM skus s
+      ${whereClause}
+      ORDER BY ${orderBy}
+      LIMIT $${idx} OFFSET $${idx + 1}
+    `;
+
+    const itemsValues = [...whereValues, safeLimit, safeOffset];
+
+    const totalQuery = `
+      SELECT COUNT(*)::int AS total
+      FROM skus s
+      ${whereClause}
+    `;
+
+    const statsQuery = `
+      SELECT
+        (SELECT COUNT(*)::int FROM skus) AS total,
+        (SELECT COUNT(*)::int FROM skus s
+          WHERE EXISTS (SELECT 1 FROM ml_items m WHERE m.sku = s.sku)
+            AND EXISTS (SELECT 1 FROM tn_items t WHERE t.sku = s.sku)) AS linked,
+        (SELECT COUNT(*)::int FROM skus s
+          WHERE EXISTS (SELECT 1 FROM ml_items m WHERE m.sku = s.sku)
+            AND NOT EXISTS (SELECT 1 FROM tn_items t WHERE t.sku = s.sku)) AS ml_only,
+        (SELECT COUNT(*)::int FROM skus s
+          WHERE NOT EXISTS (SELECT 1 FROM ml_items m WHERE m.sku = s.sku)
+            AND EXISTS (SELECT 1 FROM tn_items t WHERE t.sku = s.sku)) AS tn_only
+    `;
+
+    const [itemsRes, totalRes, statsRes] = await Promise.all([
+      pool.query(itemsQuery, itemsValues),
+      pool.query(totalQuery, whereValues),
+      pool.query(statsQuery),
+    ]);
+
+    return {
+      items: itemsRes.rows,
+      total: totalRes.rows[0]?.total ?? 0,
+      stats: statsRes.rows[0] || { total: 0, linked: 0, ml_only: 0, tn_only: 0 },
+    };
+  } catch (error) {
+    console.error("Error fetching paged SKUs:", error);
+    throw error;
+  }
+}
+
+/**
  * Obtiene solo los SKUs vinculados en ML y TN.
  * @returns {Promise<Array>} Una lista de SKUs con has_ml/has_tn en true.
  */

@@ -3,6 +3,7 @@ import {
   getAllSkus,
   getAllSkusWithSources,
   getLinkedSkus,
+  getSkusPage,
   updateStock,
 } from "../services/stock.service.js";
 
@@ -24,6 +25,24 @@ skuRouter.get("/", async (req, res) => {
 // Endpoint para listar SKUs con origen (ML/TN)
 skuRouter.get("/with-sources", async (req, res) => {
   try {
+    const limit = Number(req.query.limit);
+    const offset = Number(req.query.offset);
+    const query = req.query.q ? String(req.query.q) : "";
+    const linkedOnly = req.query.linked === "1" || req.query.linked === "true";
+    const sort = req.query.sort ? String(req.query.sort) : "stock_desc";
+
+    if (!Number.isNaN(limit) || !Number.isNaN(offset) || query || linkedOnly) {
+      const data = await getSkusPage({
+        limit,
+        offset,
+        query,
+        linkedOnly,
+        sort,
+      });
+      res.json(data);
+      return;
+    }
+
     const skus = await getAllSkusWithSources();
     res.json(skus);
   } catch (err) {
@@ -37,6 +56,23 @@ skuRouter.get("/with-sources", async (req, res) => {
 // Endpoint para listar SKUs vinculados en ML y TN
 skuRouter.get("/linked", async (req, res) => {
   try {
+    const limit = Number(req.query.limit);
+    const offset = Number(req.query.offset);
+    const query = req.query.q ? String(req.query.q) : "";
+    const sort = req.query.sort ? String(req.query.sort) : "stock_desc";
+
+    if (!Number.isNaN(limit) || !Number.isNaN(offset) || query) {
+      const data = await getSkusPage({
+        limit,
+        offset,
+        query,
+        linkedOnly: true,
+        sort,
+      });
+      res.json(data);
+      return;
+    }
+
     const skus = await getLinkedSkus();
     res.json(skus);
   } catch (err) {

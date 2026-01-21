@@ -139,6 +139,32 @@ h1 {
   font-size: 14px;
 }
 
+.sort {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.sort label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.sort select {
+  border: none;
+  background: transparent;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+  outline: none;
+}
+
 .toggle {
   display: flex;
   gap: 8px;
@@ -161,6 +187,50 @@ h1 {
 .toggle button.active {
   background: var(--accent);
   color: #fff;
+}
+
+.pagination {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+}
+
+.pager-info {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.pager-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.pager-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pager-size label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.pager-size select {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-weight: 600;
+  background: #fff;
 }
 
 .notice {

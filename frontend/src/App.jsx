@@ -9,49 +9,55 @@ function formatDate(value) {
   return date.toLocaleString();
 }
 
+function computeStats(items) {
+  let hasMl = 0;
+  let hasTn = 0;
+  let linked = 0;
+  for (const sku of items) {
+    const ml = Boolean(sku.has_ml);
+    const tn = Boolean(sku.has_tn);
+    if (ml) hasMl += 1;
+    if (tn) hasTn += 1;
+    if (ml && tn) linked += 1;
+  }
+  return {
+    total: items.length,
+    linked,
+    ml_only: hasMl - linked,
+    tn_only: hasTn - linked,
+  };
+}
+
 export default function App() {
   const [skus, setSkus] = useState([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [linkedOnly, setLinkedOnly] = useState(true);
   const [busySku, setBusySku] = useState(null);
   const [editing, setEditing] = useState({});
   const [notice, setNotice] = useState("");
   const [apiHealth, setApiHealth] = useState("checking");
+  const [sortKey, setSortKey] = useState("stock_desc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({
+    total: 0,
+    linked: 0,
+    ml_only: 0,
+    tn_only: 0,
+  });
 
-  const stats = useMemo(() => {
-    let hasMl = 0;
-    let hasTn = 0;
-    let linked = 0;
-    for (const sku of skus) {
-      const ml = Boolean(sku.has_ml);
-      const tn = Boolean(sku.has_tn);
-      if (ml) hasMl += 1;
-      if (tn) hasTn += 1;
-      if (ml && tn) linked += 1;
-    }
-    return {
-      total: skus.length,
-      linked,
-      mlOnly: hasMl - linked,
-      tnOnly: hasTn - linked,
-    };
-  }, [skus]);
+  const totalPages = useMemo(() => {
+    return Math.max(1, Math.ceil(total / pageSize));
+  }, [total, pageSize]);
 
-  const filteredSkus = useMemo(() => {
-    const trimmed = query.trim().toLowerCase();
-    let list = skus;
-    if (linkedOnly) {
-      list = list.filter((sku) => sku.has_ml && sku.has_tn);
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
     }
-    if (!trimmed) return list;
-    return list.filter((sku) => {
-      return (
-        String(sku.sku).toLowerCase().includes(trimmed) ||
-        String(sku.title || "").toLowerCase().includes(trimmed)
-      );
-    });
-  }, [skus, linkedOnly, query]);
+  }, [page, totalPages]);
 
   useEffect(() => {
     fetch(`${API_BASE}/ping`)
@@ -63,33 +69,81 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const id = setTimeout(() => {
+      setDebouncedQuery(query.trim());
+    }, 400);
+    return () => clearTimeout(id);
+  }, [query]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery, linkedOnly, sortKey, pageSize]);
+
+  useEffect(() => {
     loadSkus();
-  }, []);
+  }, [debouncedQuery, linkedOnly, sortKey, page, pageSize]);
 
   async function loadSkus() {
     setLoading(true);
     setNotice("");
+
+    const params = new URLSearchParams();
+    params.set("limit", String(pageSize));
+    params.set("offset", String((page - 1) * pageSize));
+    if (debouncedQuery) params.set("q", debouncedQuery);
+    if (linkedOnly) params.set("linked", "1");
+    if (sortKey) params.set("sort", sortKey);
+
     try {
-      const res = await fetch(`${API_BASE}/skus/with-sources`);
+      const res = await fetch(`${API_BASE}/skus/with-sources?${params.toString()}`);
       if (!res.ok) {
         throw new Error("No se pudo cargar /skus/with-sources");
       }
       const data = await res.json();
-      setSkus(data);
+      const normalized = Array.isArray(data)
+        ? { items: data, total: data.length, stats: computeStats(data) }
+        : {
+            items: data.items || [],
+            total: data.total ?? data.items?.length ?? 0,
+            stats: data.stats || computeStats(data.items || []),
+          };
+      setSkus(normalized.items);
+      setTotal(normalized.total);
+      setStats(normalized.stats);
     } catch (error) {
       try {
-        const res = await fetch(`${API_BASE}/skus/linked`);
+        const res = await fetch(`${API_BASE}/skus/linked?${params.toString()}`);
         if (!res.ok) throw new Error("No se pudo cargar /skus/linked");
         const data = await res.json();
-        setSkus(
-          data.map((item) => ({
-            ...item,
-            has_ml: true,
-            has_tn: true,
-          }))
-        );
+        const normalized = Array.isArray(data)
+          ? {
+              items: data.map((item) => ({
+                ...item,
+                has_ml: true,
+                has_tn: true,
+              })),
+              total: data.length,
+              stats: computeStats(
+                data.map((item) => ({
+                  ...item,
+                  has_ml: true,
+                  has_tn: true,
+                }))
+              ),
+            }
+          : {
+              items: (data.items || []).map((item) => ({
+                ...item,
+                has_ml: true,
+                has_tn: true,
+              })),
+              total: data.total ?? data.items?.length ?? 0,
+              stats: data.stats || computeStats(data.items || []),
+            };
+        setSkus(normalized.items);
+        setTotal(normalized.total);
+        setStats(normalized.stats);
         setLinkedOnly(true);
-        setNotice("Cargando solo vinculados.");
       } catch (fallbackError) {
         setNotice("No se pudo cargar la lista de SKUs.");
       }
@@ -141,6 +195,14 @@ export default function App() {
     }));
   }
 
+  function goToPrevPage() {
+    setPage((prev) => Math.max(1, prev - 1));
+  }
+
+  function goToNextPage() {
+    setPage((prev) => Math.min(totalPages, prev + 1));
+  }
+
   return (
     <div className="page">
       <header className="hero">
@@ -156,7 +218,11 @@ export default function App() {
           <div>
             <span className="status-label">API</span>
             <strong className={`status ${apiHealth}`}>
-              {apiHealth === "online" ? "Online" : apiHealth === "offline" ? "Offline" : "Checking"}
+              {apiHealth === "online"
+                ? "Online"
+                : apiHealth === "offline"
+                ? "Offline"
+                : "Checking"}
             </strong>
           </div>
           <button className="ghost" onClick={loadSkus} disabled={loading}>
@@ -176,11 +242,11 @@ export default function App() {
         </div>
         <div className="card">
           <p>Solo ML</p>
-          <h3>{stats.mlOnly}</h3>
+          <h3>{stats.ml_only}</h3>
         </div>
         <div className="card">
           <p>Solo TN</p>
-          <h3>{stats.tnOnly}</h3>
+          <h3>{stats.tn_only}</h3>
         </div>
       </section>
 
@@ -192,6 +258,18 @@ export default function App() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
+        </div>
+        <div className="sort">
+          <label htmlFor="sort">Ordenar</label>
+          <select
+            id="sort"
+            value={sortKey}
+            onChange={(event) => setSortKey(event.target.value)}
+          >
+            <option value="stock_desc">Stock: mayor a menor</option>
+            <option value="stock_asc">Stock: menor a mayor</option>
+            <option value="updated_desc">Actualizacion reciente</option>
+          </select>
         </div>
         <div className="toggle">
           <button
@@ -209,6 +287,37 @@ export default function App() {
         </div>
       </section>
 
+      <section className="pagination">
+        <div className="pager-info">
+          Pagina {page} de {totalPages} ({total} resultados)
+        </div>
+        <div className="pager-controls">
+          <button className="ghost" onClick={goToPrevPage} disabled={page <= 1}>
+            Anterior
+          </button>
+          <button
+            className="ghost"
+            onClick={goToNextPage}
+            disabled={page >= totalPages}
+          >
+            Siguiente
+          </button>
+        </div>
+        <div className="pager-size">
+          <label htmlFor="page-size">Filas</label>
+          <select
+            id="page-size"
+            value={pageSize}
+            onChange={(event) => setPageSize(Number(event.target.value))}
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+        </div>
+      </section>
+
       {notice ? <p className="notice">{notice}</p> : null}
 
       <section className="table">
@@ -220,13 +329,13 @@ export default function App() {
           <div className="cell">Accion</div>
         </div>
 
-        {filteredSkus.length === 0 ? (
+        {skus.length === 0 ? (
           <div className="empty">
             <h4>Sin resultados</h4>
             <p>Proba con otro SKU o desactiva el filtro.</p>
           </div>
         ) : (
-          filteredSkus.map((item) => {
+          skus.map((item) => {
             const currentValue =
               editing[item.sku] === undefined ? item.stock : editing[item.sku];
             return (
@@ -255,7 +364,9 @@ export default function App() {
                     type="number"
                     min="0"
                     value={currentValue}
-                    onChange={(event) => updateEditingValue(item.sku, event.target.value)}
+                    onChange={(event) =>
+                      updateEditingValue(item.sku, event.target.value)
+                    }
                   />
                 </div>
                 <div className="cell sources">
