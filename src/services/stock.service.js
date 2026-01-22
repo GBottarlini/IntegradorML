@@ -28,7 +28,19 @@ export async function getAllSkusWithSources() {
     const { rows } = await pool.query(
       `SELECT s.sku, s.title, s.stock, s.image_url, s.updated_at,
         EXISTS (SELECT 1 FROM ml_items m WHERE m.sku = s.sku) AS has_ml,
-        EXISTS (SELECT 1 FROM tn_items t WHERE t.sku = s.sku) AS has_tn
+        EXISTS (SELECT 1 FROM tn_items t WHERE t.sku = s.sku) AS has_tn,
+        (SELECT m.permalink FROM ml_items m
+          WHERE m.sku = s.sku AND m.permalink IS NOT NULL
+          ORDER BY m.updated_at DESC NULLS LAST
+          LIMIT 1) AS ml_permalink,
+        (SELECT t.product_id FROM tn_items t
+          WHERE t.sku = s.sku
+          ORDER BY t.updated_at DESC NULLS LAST
+          LIMIT 1) AS tn_product_id,
+        (SELECT t.variant_id FROM tn_items t
+          WHERE t.sku = s.sku
+          ORDER BY t.updated_at DESC NULLS LAST
+          LIMIT 1) AS tn_variant_id
        FROM skus s
        ORDER BY s.updated_at DESC`
     );
@@ -89,7 +101,19 @@ export async function getSkusPage({
     const itemsQuery = `
       SELECT s.sku, s.title, s.stock, s.image_url, s.updated_at,
         EXISTS (SELECT 1 FROM ml_items m WHERE m.sku = s.sku) AS has_ml,
-        EXISTS (SELECT 1 FROM tn_items t WHERE t.sku = s.sku) AS has_tn
+        EXISTS (SELECT 1 FROM tn_items t WHERE t.sku = s.sku) AS has_tn,
+        (SELECT m.permalink FROM ml_items m
+          WHERE m.sku = s.sku AND m.permalink IS NOT NULL
+          ORDER BY m.updated_at DESC NULLS LAST
+          LIMIT 1) AS ml_permalink,
+        (SELECT t.product_id FROM tn_items t
+          WHERE t.sku = s.sku
+          ORDER BY t.updated_at DESC NULLS LAST
+          LIMIT 1) AS tn_product_id,
+        (SELECT t.variant_id FROM tn_items t
+          WHERE t.sku = s.sku
+          ORDER BY t.updated_at DESC NULLS LAST
+          LIMIT 1) AS tn_variant_id
       FROM skus s
       ${whereClause}
       ORDER BY ${orderBy}
@@ -144,7 +168,19 @@ export async function getLinkedSkus() {
     const { rows } = await pool.query(
       `SELECT s.sku, s.title, s.stock, s.image_url, s.updated_at,
         true AS has_ml,
-        true AS has_tn
+        true AS has_tn,
+        (SELECT m.permalink FROM ml_items m
+          WHERE m.sku = s.sku AND m.permalink IS NOT NULL
+          ORDER BY m.updated_at DESC NULLS LAST
+          LIMIT 1) AS ml_permalink,
+        (SELECT t.product_id FROM tn_items t
+          WHERE t.sku = s.sku
+          ORDER BY t.updated_at DESC NULLS LAST
+          LIMIT 1) AS tn_product_id,
+        (SELECT t.variant_id FROM tn_items t
+          WHERE t.sku = s.sku
+          ORDER BY t.updated_at DESC NULLS LAST
+          LIMIT 1) AS tn_variant_id
        FROM skus s
        WHERE EXISTS (SELECT 1 FROM ml_items m WHERE m.sku = s.sku)
          AND EXISTS (SELECT 1 FROM tn_items t WHERE t.sku = s.sku)

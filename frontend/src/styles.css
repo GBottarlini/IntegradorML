@@ -410,6 +410,24 @@ h1 {
   justify-content: flex-end;
 }
 
+.action-links {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.action-links a {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-cool);
+  text-decoration: none;
+}
+
+.action-links a:hover {
+  text-decoration: underline;
+}
+
 button {
   font-family: inherit;
 }

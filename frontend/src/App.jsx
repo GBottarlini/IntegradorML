@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3000";
+const TN_ADMIN_BASE = import.meta.env.VITE_TN_ADMIN_BASE || "";
 
 function formatDate(value) {
   if (!value) return "-";
@@ -322,7 +323,7 @@ export default function App() {
               />
             </label>
             <label>
-              Contraseña
+              Contrasena
               <input
                 type="password"
                 value={loginForm.password}
@@ -486,6 +487,11 @@ export default function App() {
           skus.map((item) => {
             const currentValue =
               editing[item.sku] === undefined ? item.stock : editing[item.sku];
+            const tnBase = TN_ADMIN_BASE ? TN_ADMIN_BASE.replace(/\/$/, "") : "";
+            const tnLink =
+              tnBase && item.tn_product_id
+                ? `${tnBase}/${item.tn_product_id}`
+                : "";
             return (
               <div className="row" key={item.sku}>
                 <div className="cell sku">{item.sku}</div>
@@ -529,6 +535,18 @@ export default function App() {
                   >
                     {busySku === item.sku ? "Enviando..." : "Actualizar"}
                   </button>
+                  <div className="action-links">
+                    {item.ml_permalink ? (
+                      <a href={item.ml_permalink} target="_blank" rel="noreferrer">
+                        Ver ML
+                      </a>
+                    ) : null}
+                    {tnLink ? (
+                      <a href={tnLink} target="_blank" rel="noreferrer">
+                        Ver TN
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             );
