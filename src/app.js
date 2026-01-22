@@ -5,6 +5,7 @@ import { skuRouter } from "./routes/sku.routes.js";
 import { webhooksRouter } from "./routes/webhooks.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { tnRouter } from "./routes/tn.routes.js";
+import { requireAuth } from "./middleware/auth.middleware.js";
 
 export const app = express();
 
@@ -39,12 +40,12 @@ app.get("/db/ping", async (_req, res) => {
   }
 });
 
-app.use("/ml", mlRouter);
+app.use("/ml", requireAuth, mlRouter);
 
-app.use("/skus", skuRouter);
+app.use("/skus", requireAuth, skuRouter);
 
 app.use("/webhooks", webhooksRouter);
 
 app.use("/auth", authRouter);
 
-app.use("/tn", tnRouter);
+app.use("/tn", requireAuth, tnRouter);

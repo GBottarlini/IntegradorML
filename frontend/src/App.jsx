@@ -28,6 +28,14 @@ function computeStats(items) {
   };
 }
 
+function getStoredToken() {
+  try {
+    return localStorage.getItem("auth_token") || "";
+  } catch {
+    return "";
+  }
+}
+
 export default function App() {
   const [skus, setSkus] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -48,16 +56,13 @@ export default function App() {
     ml_only: 0,
     tn_only: 0,
   });
+  const [token, setToken] = useState(getStoredToken);
+  const [loginForm, setLoginForm] = useState({ username: "", password: "" });
+  const [loginError, setLoginError] = useState("");
 
   const totalPages = useMemo(() => {
     return Math.max(1, Math.ceil(total / pageSize));
   }, [total, pageSize]);
-
-  useEffect(() => {
-    if (page > totalPages) {
-      setPage(totalPages);
-    }
-  }, [page, totalPages]);
 
   useEffect(() => {
     fetch(`${API_BASE}/ping`)
@@ -80,8 +85,46 @@ export default function App() {
   }, [debouncedQuery, linkedOnly, sortKey, pageSize]);
 
   useEffect(() => {
+    if (!token) {
+      setSkus([]);
+      setTotal(0);
+      setStats({ total: 0, linked: 0, ml_only: 0, tn_only: 0 });
+      return;
+    }
     loadSkus();
-  }, [debouncedQuery, linkedOnly, sortKey, page, pageSize]);
+  }, [debouncedQuery, linkedOnly, sortKey, page, pageSize, token]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  function persistToken(nextToken) {
+    setToken(nextToken);
+    try {
+      if (nextToken) {
+        localStorage.setItem("auth_token", nextToken);
+      } else {
+        localStorage.removeItem("auth_token");
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  async function authFetch(url, options = {}) {
+    const headers = {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${token}`,
+    };
+    const response = await fetch(url, { ...options, headers });
+    if (response.status === 401) {
+      persistToken("");
+      throw new Error("AUTH_REQUIRED");
+    }
+    return response;
+  }
 
   async function loadSkus() {
     setLoading(true);
@@ -95,7 +138,7 @@ export default function App() {
     if (sortKey) params.set("sort", sortKey);
 
     try {
-      const res = await fetch(`${API_BASE}/skus/with-sources?${params.toString()}`);
+      const res = await authFetch(`${API_BASE}/skus/with-sources?${params.toString()}`);
       if (!res.ok) {
         throw new Error("No se pudo cargar /skus/with-sources");
       }
@@ -111,8 +154,9 @@ export default function App() {
       setTotal(normalized.total);
       setStats(normalized.stats);
     } catch (error) {
+      if (error.message === "AUTH_REQUIRED") return;
       try {
-        const res = await fetch(`${API_BASE}/skus/linked?${params.toString()}`);
+        const res = await authFetch(`${API_BASE}/skus/linked?${params.toString()}`);
         if (!res.ok) throw new Error("No se pudo cargar /skus/linked");
         const data = await res.json();
         const normalized = Array.isArray(data)
@@ -165,7 +209,7 @@ export default function App() {
     setBusySku(sku);
     setNotice("");
     try {
-      const res = await fetch(`${API_BASE}/skus/${encodeURIComponent(sku)}/stock`, {
+      const res = await authFetch(`${API_BASE}/skus/${encodeURIComponent(sku)}/stock`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stock }),
@@ -182,10 +226,39 @@ export default function App() {
       );
       setNotice(`Stock actualizado para ${sku}.`);
     } catch (error) {
+      if (error.message === "AUTH_REQUIRED") return;
       setNotice(error.message || "Error actualizando stock.");
     } finally {
       setBusySku(null);
     }
+  }
+
+  async function handleLogin(event) {
+    event.preventDefault();
+    setLoginError("");
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(loginForm),
+      });
+      if (!res.ok) {
+        throw new Error("Credenciales invalidas.");
+      }
+      const data = await res.json();
+      if (!data?.token) {
+        throw new Error("No se recibio token.");
+      }
+      persistToken(data.token);
+      setLoginForm({ username: "", password: "" });
+    } catch (error) {
+      setLoginError(error.message || "No se pudo iniciar sesion.");
+    }
+  }
+
+  function handleLogout() {
+    persistToken("");
+    setSkus([]);
   }
 
   function updateEditingValue(sku, value) {
@@ -201,6 +274,76 @@ export default function App() {
 
   function goToNextPage() {
     setPage((prev) => Math.min(totalPages, prev + 1));
+  }
+
+  if (!token) {
+    return (
+      <div className="page">
+        <header className="hero">
+          <div>
+            <p className="eyebrow">Nation Stock Integrator</p>
+            <h1>Panel de stock unificado</h1>
+            <p className="subtitle">
+              Inicia sesion para acceder al panel y administrar el stock.
+            </p>
+          </div>
+          <div className="status-card">
+            <div>
+              <span className="status-label">API</span>
+              <strong className={`status ${apiHealth}`}>
+                {apiHealth === "online"
+                  ? "Online"
+                  : apiHealth === "offline"
+                  ? "Offline"
+                  : "Checking"}
+              </strong>
+            </div>
+          </div>
+        </header>
+
+        <section className="login-card">
+          <h2>Ingresar</h2>
+          <p>Acceso privado al panel.</p>
+          <form onSubmit={handleLogin}>
+            <label>
+              Usuario
+              <input
+                type="text"
+                value={loginForm.username}
+                onChange={(event) =>
+                  setLoginForm((prev) => ({
+                    ...prev,
+                    username: event.target.value,
+                  }))
+                }
+                autoComplete="username"
+                autoCapitalize="none"
+                required
+              />
+            </label>
+            <label>
+              Contraseña
+              <input
+                type="password"
+                value={loginForm.password}
+                onChange={(event) =>
+                  setLoginForm((prev) => ({
+                    ...prev,
+                    password: event.target.value,
+                  }))
+                }
+                autoComplete="current-password"
+                required
+              />
+            </label>
+            {loginError ? <p className="login-error">{loginError}</p> : null}
+            <button className="primary" type="submit">
+              Entrar
+            </button>
+          </form>
+        </section>
+      </div>
+    );
   }
 
   return (
@@ -225,9 +368,14 @@ export default function App() {
                 : "Checking"}
             </strong>
           </div>
-          <button className="ghost" onClick={loadSkus} disabled={loading}>
-            {loading ? "Cargando..." : "Refrescar"}
-          </button>
+          <div className="status-actions">
+            <button className="ghost" onClick={loadSkus} disabled={loading}>
+              {loading ? "Cargando..." : "Refrescar"}
+            </button>
+            <button className="ghost" onClick={handleLogout}>
+              Salir
+            </button>
+          </div>
         </div>
       </header>
 

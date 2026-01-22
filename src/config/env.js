@@ -6,6 +6,10 @@ export const env = {
   mlClientId: process.env.ML_CLIENT_ID,
   mlClientSecret: process.env.ML_CLIENT_SECRET,
   mlRefreshToken: process.env.ML_REFRESH_TOKEN,
+  jwtSecret: process.env.JWT_SECRET,
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || "12h",
+  adminUser: process.env.ADMIN_USER,
+  adminPassword: process.env.ADMIN_PASSWORD,
   tiendaNubeAccessToken: process.env.TIENDA_NUBE_ACCESS_TOKEN,
   tiendaNubeStoreId: process.env.TIENDA_NUBE_STORE_ID,
   tiendaNubeClientId: process.env.TIENDA_NUBE_CLIENT_ID,
@@ -28,6 +32,15 @@ if (!env.mlClientSecret) {
 }
 if (!env.mlRefreshToken) {
   console.warn("WARN: Falta ML_REFRESH_TOKEN en .env");
+}
+if (!env.jwtSecret) {
+  console.warn("WARN: Falta JWT_SECRET en .env");
+}
+if (!env.adminUser) {
+  console.warn("WARN: Falta ADMIN_USER en .env");
+}
+if (!env.adminPassword) {
+  console.warn("WARN: Falta ADMIN_PASSWORD en .env");
 }
 if (!env.tiendaNubeAccessToken) {
   console.warn("WARN: Falta TIENDA_NUBE_ACCESS_TOKEN en .env");

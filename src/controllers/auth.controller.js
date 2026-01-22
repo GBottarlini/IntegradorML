@@ -1,5 +1,6 @@
 // src/controllers/auth.controller.js
 import axios from "axios";
+import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 
 const TN_CLIENT_ID = env.tiendaNubeClientId;
@@ -16,6 +17,45 @@ function ensureTnAuthConfig(res) {
     return false;
   }
   return true;
+}
+
+function ensureLoginConfig(res) {
+  if (!env.jwtSecret || !env.adminUser || !env.adminPassword) {
+    res.status(500).json({
+      error: "AUTH_CONFIG_MISSING",
+      message:
+        "Faltan JWT_SECRET, ADMIN_USER o ADMIN_PASSWORD en el .env.",
+    });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Inicia sesion y devuelve un JWT.
+ */
+export function login(req, res) {
+  if (!ensureLoginConfig(res)) return;
+  const { username, password } = req.body || {};
+
+  if (!username || !password) {
+    return res.status(400).json({
+      error: "INVALID_PAYLOAD",
+      message: "username y password son requeridos.",
+    });
+  }
+
+  if (username !== env.adminUser || password !== env.adminPassword) {
+    return res.status(401).json({ error: "INVALID_CREDENTIALS" });
+  }
+
+  const token = jwt.sign(
+    { sub: username, role: "admin" },
+    env.jwtSecret,
+    { expiresIn: env.jwtExpiresIn }
+  );
+
+  res.json({ token, expires_in: env.jwtExpiresIn });
 }
 
 /**
