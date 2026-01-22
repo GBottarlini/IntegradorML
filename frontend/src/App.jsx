@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3000";
 const TN_ADMIN_BASE = import.meta.env.VITE_TN_ADMIN_BASE || "";
@@ -60,6 +60,8 @@ export default function App() {
   const [token, setToken] = useState(getStoredToken);
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [loginError, setLoginError] = useState("");
+  const [toast, setToast] = useState(null);
+  const toastTimerRef = useRef(null);
 
   const totalPages = useMemo(() => {
     return Math.max(1, Math.ceil(total / pageSize));
@@ -101,6 +103,14 @@ export default function App() {
     }
   }, [page, totalPages]);
 
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
   function persistToken(nextToken) {
     setToken(nextToken);
     try {
@@ -112,6 +122,16 @@ export default function App() {
     } catch {
       // ignore storage errors
     }
+  }
+
+  function showToast(message, type = "success") {
+    setToast({ message, type });
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+    }, 3000);
   }
 
   async function authFetch(url, options = {}) {
@@ -225,10 +245,10 @@ export default function App() {
           item.sku === updated.sku ? { ...item, ...updated } : item
         )
       );
-      setNotice(`Stock actualizado para ${sku}.`);
+      showToast(`Stock actualizado para ${sku}.`, "success");
     } catch (error) {
       if (error.message === "AUTH_REQUIRED") return;
-      setNotice(error.message || "Error actualizando stock.");
+      showToast(error.message || "Error actualizando stock.", "error");
     } finally {
       setBusySku(null);
     }
@@ -537,13 +557,23 @@ export default function App() {
                   </button>
                   <div className="action-links">
                     {item.ml_permalink ? (
-                      <a href={item.ml_permalink} target="_blank" rel="noreferrer">
-                        Ver ML
+                      <a
+                        className="chip-link"
+                        href={item.ml_permalink}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Abrir ML
                       </a>
                     ) : null}
                     {tnLink ? (
-                      <a href={tnLink} target="_blank" rel="noreferrer">
-                        Ver TN
+                      <a
+                        className="chip-link"
+                        href={tnLink}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Abrir TN
                       </a>
                     ) : null}
                   </div>
@@ -553,6 +583,12 @@ export default function App() {
           })
         )}
       </section>
+
+      {toast ? (
+        <div className={`toast ${toast.type || "success"}`}>
+          {toast.message}
+        </div>
+      ) : null}
     </div>
   );
 }
